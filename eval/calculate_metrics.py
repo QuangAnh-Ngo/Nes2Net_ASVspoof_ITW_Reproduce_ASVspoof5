@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from pathlib import Path
 
 from .calculate_modules import *
 
@@ -36,16 +37,16 @@ def calculate_minDCF_EER_CLLR(cm_scores_file,
     if printout:
         with open(output_file, "w") as f_res:
             f_res.write('\nCM SYSTEM\n')
-            f_res.write('\tmin DCF \t\t= {} % '
+            f_res.write('\tmin DCF \t\t= {} '
                         '(min DCF for countermeasure)\n'.format(
                             minDCF_cm))
             f_res.write('\tEER\t\t= {:8.9f} % '
                         '(EER for countermeasure)\n'.format(
                             eer_cm * 100))
-            f_res.write('\tCLLR\t\t= {:8.9f} % '
+            f_res.write('\tCLLR\t\t= {:8.9f} '
                         '(CLLR for countermeasure)\n'.format(
-                            cllr_cm * 100))
-        os.system(f"cat {output_file}")
+                            cllr_cm))
+        print(Path(output_file).read_text())
 
     return minDCF_cm, eer_cm, cllr_cm
 

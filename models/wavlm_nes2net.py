@@ -1,5 +1,6 @@
 import random
 from typing import Union
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -9,6 +10,59 @@ from torch import Tensor
 import math
 import sys
 from .WavLM import *
+
+
+def _load_dotenv_if_present(env_path=".env"):
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
+
+
+def _resolve_wavlm_large_checkpoint():
+    _load_dotenv_if_present()
+    candidates = [
+        os.environ.get("WAVLM_LARGE_PATH"),
+        os.path.join("pretrained_models", "WavLM-Large.pt"),
+        os.path.join("pretrained_models", "wavlm_large.pt"),
+    ]
+    for cp_path in candidates:
+        if cp_path and os.path.exists(cp_path):
+            return cp_path
+    raise FileNotFoundError(
+        "Missing WavLM Large checkpoint. Expected pretrained_models/WavLM-Large.pt "
+        "or set WAVLM_LARGE_PATH in .env."
+    )
+
+
+def _validate_wavlm_large_checkpoint(checkpoint, cp_path):
+    if not isinstance(checkpoint, dict) or "cfg" not in checkpoint or "model" not in checkpoint:
+        raise ValueError(
+            f"{cp_path} is not an S3PRL/Microsoft WavLM checkpoint with 'cfg' and 'model'. "
+            "Do not use HuggingFace pytorch_model.bin here."
+        )
+    cfg = checkpoint["cfg"]
+    expected = {
+        "encoder_layers": 24,
+        "encoder_embed_dim": 1024,
+        "encoder_attention_heads": 16,
+    }
+    mismatches = {
+        key: (cfg.get(key), value)
+        for key, value in expected.items()
+        if cfg.get(key) != value
+    }
+    if mismatches:
+        raise ValueError(
+            f"{cp_path} is not WavLM Large. Expected {expected}, got {mismatches}."
+        )
 
 
 class ASTP(nn.Module):
@@ -160,9 +214,11 @@ class SSLModel(nn.Module):
 class SSLModel(nn.Module):
     def __init__(self,device):
         super(SSLModel, self).__init__()
-        
-        cp_path = 'pretrained_models/WavLM-Large.pt'   # Change the pre-trained XLSR model path. 
-        checkpoint = torch.load(cp_path)
+
+        cp_path = _resolve_wavlm_large_checkpoint()
+        checkpoint = torch.load(cp_path, map_location=device)
+        _validate_wavlm_large_checkpoint(checkpoint, cp_path)
+        print(f"Using WavLM Large checkpoint: {cp_path}")
         cfg = WavLMConfig(checkpoint['cfg'])
         self.model = WavLM(cfg)
         self.loadParameters(checkpoint['model'])
